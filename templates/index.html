@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EduGenie - AI Learning Assistant</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <div class="logo">
+                <div class="logo-icon">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path>
+                        <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"></path>
+                    </svg>
+                </div>
+                <h1>EduGenie</h1>
+            </div>
+            <p class="tagline">Google Gemini Powered Learning Assistant</p>
+        </header>
+
+        <!-- Main Card -->
+        <main class="card">
+            <!-- Task Selection -->
+            <div class="form-group">
+                <label for="task-select">Choose a Task</label>
+                <select id="task-select">
+                    <option value="explain">Explain</option>
+                    <option value="qna">QnA</option>
+                    <option value="quiz">Quiz</option>
+                    <option value="summary">Summary</option>
+                    <option value="recommend">Recommend Path</option>
+                </select>
+            </div>
+
+            <!-- Input Area -->
+            <div class="form-group">
+                <label for="input-text" id="input-label">Topic</label>
+                <textarea
+                    id="input-text"
+                    placeholder="Enter a topic to explain (e.g., Photosynthesis, Pythagorean Theorem)..."
+                    rows="5"
+                ></textarea>
+            </div>
+
+            <!-- Submit Button -->
+            <button id="submit-btn" class="submit-btn">
+                <span class="btn-text">Submit</span>
+                <span class="btn-loader hidden">
+                    <span class="spinner"></span> Processing...
+                </span>
+            </button>
+
+            <!-- Loading Indicator -->
+            <div id="loading" class="loading hidden">
+                <div class="loading-spinner"></div>
+                <p>EduGenie is thinking...</p>
+            </div>
+
+            <!-- Error Message Section -->
+            <div id="error-section" class="error-section hidden">
+                <div class="error-icon">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+                        <line x1="12" y1="9" x2="12" y2="13"></line>
+                        <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                    </svg>
+                </div>
+                <p id="error-message"></p>
+            </div>
+
+            <!-- Result Section -->
+            <div id="result-section" class="result-section hidden">
+                <h2 id="result-title">Result</h2>
+                <div id="result-content" class="result-content"></div>
+            </div>
+        </main>
+
+        <!-- Footer -->
+        <footer class="footer">
+            <p>Powered by Google Gemini API</p>
+        </footer>
+    </div>
+
+    <script>
+        // DOM Elements
+        const taskSelect = document.getElementById('task-select');
+        const inputLabel = document.getElementById('input-label');
+        const inputText = document.getElementById('input-text');
+        const submitBtn = document.getElementById('submit-btn');
+        const btnText = submitBtn.querySelector('.btn-text');
+        const btnLoader = submitBtn.querySelector('.btn-loader');
+        const loading = document.getElementById('loading');
+        const errorSection = document.getElementById('error-section');
+        const errorMessage = document.getElementById('error-message');
+        const resultSection = document.getElementById('result-section');
+        const resultTitle = document.getElementById('result-title');
+        const resultContent = document.getElementById('result-content');
+
+        // Task-specific labels and placeholders
+        const taskConfig = {
+            explain: { label: 'Topic', placeholder: 'Enter a topic to explain (e.g., Photosynthesis, Pythagorean Theorem)...' },
+            qna: { label: 'Question', placeholder: 'Ask any question (e.g., What is the largest ocean?)...' },
+            quiz: { label: 'Text / Passage', placeholder: 'Paste a passage or text to generate quiz questions from...' },
+            summary: { label: 'Text to Summarize', placeholder: 'Paste a long paragraph or article to summarize...' },
+            recommend: { label: 'Topic', placeholder: 'Enter a topic for a learning path (e.g., Machine Learning, Python)...' }
+        };
+
+        // Update label and placeholder when task changes
+        taskSelect.addEventListener('change', () => {
+            const config = taskConfig[taskSelect.value];
+            inputLabel.textContent = config.label;
+            inputText.placeholder = config.placeholder;
+            hideError();
+            hideResult();
+        });
+
+        // Map task values to API endpoints
+        const endpointMap = {
+            explain: '/explain',
+            qna: '/qa',
+            quiz: '/quiz',
+            summary: '/summarize',
+            recommend: '/learn/recommendations'
+        };
+
+        // Map task values to request body keys
+        const bodyKeyMap = {
+            explain: 'topic',
+            qna: 'question',
+            quiz: 'text',
+            summary: 'text',
+            recommend: 'topic'
+        };
+
+        // Map task values to result titles
+        const titleMap = {
+            explain: 'Explanation',
+            qna: 'Answer',
+            quiz: 'Quiz',
+            summary: 'Summary',
+            recommend: 'Learning Path'
+        };
+
+        // Submit button click handler
+        submitBtn.addEventListener('click', handleSubmit);
+
+        // Allow Ctrl+Enter to submit
+        inputText.addEventListener('keydown', (e) => {
+            if (e.ctrlKey && e.key === 'Enter') {
+                handleSubmit();
+            }
+        });
+
+        async function handleSubmit() {
+            const task = taskSelect.value;
+            const input = inputText.value.trim();
+
+            // Validate input
+            if (!input) {
+                showError('Please enter some text before submitting.');
+                return;
+            }
+
+            // Show loading state
+            setLoading(true);
+            hideError();
+            hideResult();
+
+            try {
+                const endpoint = endpointMap[task];
+                const bodyKey = bodyKeyMap[task];
+
+                const response = await fetch(endpoint, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ [bodyKey]: input })
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.error || 'Something went wrong. Please try again.');
+                }
+
+                // Display result based on task type
+                displayResult(task, data);
+
+            } catch (err) {
+                showError(err.message || 'Failed to connect to the server. Please try again.');
+            } finally {
+                setLoading(false);
+            }
+        }
+
+        function displayResult(task, data) {
+            resultTitle.textContent = titleMap[task];
+            resultContent.innerHTML = '';
+
+            if (task === 'quiz') {
+                // Render quiz questions
+                const quiz = data.quiz;
+                quiz.forEach((q, index) => {
+                    const questionDiv = document.createElement('div');
+                    questionDiv.className = 'quiz-question';
+
+                    const questionText = document.createElement('p');
+                    questionText.className = 'quiz-question-text';
+                    questionText.textContent = `Q${index + 1}: ${q.question}`;
+                    questionDiv.appendChild(questionText);
+
+                    const optionsDiv = document.createElement('div');
+                    optionsDiv.className = 'quiz-options';
+
+                    q.options.forEach((option, optIndex) => {
+                        const optionLabel = document.createElement('label');
+                        optionLabel.className = 'quiz-option';
+
+                        const radio = document.createElement('input');
+                        radio.type = 'radio';
+                        radio.name = `question-${index}`;
+                        radio.value = String.fromCharCode(65 + optIndex);
+
+                        const optionText = document.createElement('span');
+                        optionText.textContent = option;
+
+                        optionLabel.appendChild(radio);
+                        optionLabel.appendChild(optionText);
+                        optionsDiv.appendChild(optionLabel);
+                    });
+
+                    questionDiv.appendChild(optionsDiv);
+
+                    // Add check answer button
+                    const checkBtn = document.createElement('button');
+                    checkBtn.className = 'check-answer-btn';
+                    checkBtn.textContent = 'Check Answer';
+                    checkBtn.addEventListener('click', () => {
+                        const selected = optionsDiv.querySelector('input:checked');
+                        if (!selected) {
+                            alert('Please select an answer first.');
+                            return;
+                        }
+                        const isCorrect = selected.value === q.answer;
+                        const feedback = document.createElement('p');
+                        feedback.className = isCorrect ? 'feedback correct' : 'feedback incorrect';
+                        feedback.textContent = isCorrect
+                            ? 'Correct! Well done!'
+                            : `Incorrect. The correct answer is ${q.answer}.`;
+                        questionDiv.appendChild(feedback);
+                    });
+                    questionDiv.appendChild(checkBtn);
+
+                    resultContent.appendChild(questionDiv);
+                });
+            } else {
+                // Render text results (explain, qna, summary, recommend)
+                const textKey = task === 'explain' ? 'explanation'
+                                : task === 'qna' ? 'answer'
+                                : task === 'summary' ? 'summary'
+                                : 'recommendations';
+
+                const text = data[textKey] || 'No result received.';
+
+                // Convert newlines to <br> for HTML display
+                const para = document.createElement('p');
+                para.innerHTML = text.replace(/\n/g, '<br>');
+                resultContent.appendChild(para);
+            }
+
+            resultSection.classList.remove('hidden');
+            resultSection.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+
+        function setLoading(isLoading) {
+            if (isLoading) {
+                submitBtn.disabled = true;
+                btnText.classList.add('hidden');
+                btnLoader.classList.remove('hidden');
+                loading.classList.remove('hidden');
+            } else {
+                submitBtn.disabled = false;
+                btnText.classList.remove('hidden');
+                btnLoader.classList.add('hidden');
+                loading.classList.add('hidden');
+            }
+        }
+
+        function showError(message) {
+            errorMessage.textContent = message;
+            errorSection.classList.remove('hidden');
+        }
+
+        function hideError() {
+            errorSection.classList.add('hidden');
+        }
+
+        function hideResult() {
+            resultSection.classList.add('hidden');
+        }
+    </script>
+</body>
+</html>
